@@ -1,15 +1,15 @@
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <linux/if_ether.h>
-
-// TODO vmlinux.h
+#include "bpf_helpers.h"
+#include "if_ether.h"
 #include "vmlinux.h"
-// typedef _Bool bool;
+#include "bpf_endian.h"
 
-// enum {
-// 	false = 0,
-// 	true = 1,
-// };
+#define TCP_CSUM_OFF (ETH_HLEN + sizeof(struct iphdr) + offsetof(struct tcphdr, check))
+#define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
+#define IP_SRC_OFF (ETH_HLEN + offsetof(struct iphdr, saddr))
+#define IP_DEST_OFF (ETH_HLEN + offsetof(struct iphdr, daddr))
+#define TCP_DPORT_OFF (ETH_HLEN + sizeof(struct iphdr) + offsetof(struct tcphdr, dest))
+#define IS_PSEUDO 0x10
+
 
 static __always_inline int
 __revalidate_data_pull(struct __sk_buff *skb, void **data_, void **data_end_,
@@ -25,7 +25,7 @@ __revalidate_data_pull(struct __sk_buff *skb, void **data_, void **data_end_,
 	data_end = (void*)((long)skb->data_end);
 	data = (void*)((long)skb->data);
 	if (data + tot_len > data_end)
-		return 1;
+		return -1;
 
 	/* Verifier workaround: pointer arithmetic on pkt_end prohibited. */
 	*data_ = data;
@@ -66,7 +66,7 @@ static __always_inline int ip_decrease_ttl(struct iphdr *iph)
 	// TODO add back __force
 	__u32 check = ( __u32)iph->check;
 	// TODO add back __force
-	check += ( __u32)htons(0x0100);
+	check += ( __u32)bpf_htons(0x0100);
 		// TODO add back __force
 	iph->check = ( __sum16)(check + (check >= 0xFFFF));
 	return --iph->ttl;
